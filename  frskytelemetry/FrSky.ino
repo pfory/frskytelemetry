@@ -66,13 +66,8 @@ static uint16_t GPS_ground_course = 0;                       // degrees*10
 static uint8_t  GPS_Present = 0;                             // Checksum from Gps serial
 static uint8_t GPS_FIX;
 
-static uint16_t Datas_RPM=3246; //RPM
-static uint16_t Datas_Fuel_level=75;
-static uint16_t Datas_Volt=6196;
-static uint16_t Datas_altitude_bp;
-static uint16_t Datas_altitude_ap;
-static uint16_t Datas_GPS_speed_bp;
-static uint16_t Datas_GPS_speed_ap;
+static uint16_t Datas_RPM=50; //RPM
+static uint16_t Datas_Fuel_level=50;
 
 unsigned long lastTime=0;
 unsigned int showInterval=1000;
@@ -126,7 +121,7 @@ unsigned int showInterval=1000;
 #define GPS_BAUD                  4800
 
 SoftwareSerial SerialGPS        (GPS_SERIAL,5);             // RX, TX
-#define verbose
+//#define verbose
 #ifdef verbose
 SoftwareSerial SerialVerbose    (6,7); // RX, TX
 #endif
@@ -238,6 +233,8 @@ void loop() {
         #endif
         sensor[i]=tempTemp;
       } 
+      //sensor[0]=18;
+      //sensor[1]=26;
     }
   }
   
@@ -581,34 +578,39 @@ void send_Fuel_level(void)
 // Cell voltage  todo !!!!!!!!!!!!!!!!!!
 void send_Cell_volt(void) // Datas FrSky FLVS-01 voltage sensor
 {
-  uint16_t Datas_Volt;
+  uint16_t datasVolt;
+  uint8_t cellNo=1;
+  float voltageConst=0.002;
+  uint16_t voltage = 4; //V
   uint8_t number_of_cells = 0;   // LiPo 3S = 3; LiPo 4S = 4 ...
   static uint8_t cell = 0;
   if (cell >= number_of_cells); cell = 0;
   
-  Datas_Volt = 0; // 0.01v / 0 ~ 4.2v
+  uint16_t mask = 4095 + cellNo;
 
+  datasVolt = (uint16_t)(voltage / voltageConst) ^ mask;
+  
+  
+  #ifdef verbose
+  SerialVerbose.print("Volt:");
+  SerialVerbose.println(datasVolt);
+  #endif
+  
   sendDataHead(ID_Volt);
-  write_FrSky16(Datas_Volt);
+  //bit
+  //0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15
+  //cell#  | voltage - 2100 = 0-4.2V
+  datasVolt = 13336;
+  write_FrSky16(datasVolt);
 }
 
 // Altitude from BMP
 void send_Altitude(void)
 {
-    // static uint16_t Start_altitude;
-
-    //if (!f.ARMED)
-    // {
-       // Start_altitude = EstAlt / 100;
-    // }
-
-    // Datas_altitude_bp = (EstAlt / 100) - Start_altitude;
-    // Datas_altitude_ap = (EstAlt % 100);
-
   sendDataHead(ID_Altitude_bp);
-  write_FrSky16(Datas_altitude_bp);
+  write_FrSky16((int16_t)(altitude - altitudeGround));
   sendDataHead(ID_Altitude_ap);
-  write_FrSky16(Datas_altitude_ap);
+  write_FrSky16(0); //nejak nepracuje s desetinama
 }
 
 // GPS speed
@@ -619,7 +621,7 @@ void send_GPS_speed(void)
   {            
   #endif
     sendDataHead(ID_GPS_speed_bp);
-    write_FrSky16(GPS_speed * 0.036);
+    write_FrSky16(GPS_speed * 0.036); //cm/s -> km/h
     sendDataHead(ID_GPS_speed_ap);
     write_FrSky16(0);
   #ifndef ignoreFix  
@@ -634,36 +636,19 @@ void send_GPS_position(void)
   if (GPS_FIX && GPS_numSat >= 4)
   {
   #endif
-    uint16_t Datas_Longitude_bp;
-    uint16_t Datas_Longitude_ap;
-    uint16_t Datas_E_W;
-    uint16_t Datas_Latitude_bp;
-    uint16_t Datas_Latitude_ap;
-    uint16_t Datas_N_S;
-    
-    /*SerialVerbose.print(GPS_coord[LAT]);
-    SerialVerbose.print(" ");
-    SerialVerbose.println(GPS_coord[LON]);*/
-    Datas_Longitude_bp = abs(GPS_coord[LON]) / 100000;
-    Datas_Longitude_ap = abs((GPS_coord[LON])/10)  % 10000;
-    Datas_E_W = GPS_coord[LON] < 0 ? 'W' : 'E';
-    Datas_Latitude_bp = abs(GPS_coord[LAT]) / 100000;
-    Datas_Latitude_ap = abs((GPS_coord[LAT])/10) % 10000;
-    Datas_N_S = GPS_coord[LAT] < 0 ? 'S' : 'N';
-
     sendDataHead(ID_Longitude_bp);
-    write_FrSky16(Datas_Longitude_bp);
+    write_FrSky16(abs(GPS_coord[LON]) / 100000);
     sendDataHead(ID_Longitude_ap);
-    write_FrSky16(Datas_Longitude_ap);
+    write_FrSky16(abs((GPS_coord[LON])/10)  % 10000);
     sendDataHead(ID_E_W);
-    write_FrSky16(Datas_E_W);
+    write_FrSky16(GPS_coord[LON] < 0 ? 'W' : 'E');
 
     sendDataHead(ID_Latitude_bp);
-    write_FrSky16(Datas_Latitude_bp);
+    write_FrSky16(abs(GPS_coord[LAT]) / 100000);
     sendDataHead(ID_Latitude_ap);
-    write_FrSky16(Datas_Latitude_ap);
+    write_FrSky16(abs((GPS_coord[LAT])/10) % 10000);
     sendDataHead(ID_N_S);
-    write_FrSky16(Datas_N_S);
+    write_FrSky16(GPS_coord[LAT] < 0 ? 'S' : 'N');
   #ifndef ignoreFix  
   }
   #endif
@@ -752,6 +737,7 @@ void send_Voltage_ampere(void)
      uint16_t Datas_Voltage_vBat_bp;
      uint16_t Datas_Voltage_vBat_ap;   
      uint16_t voltage;
+     vbat =420;
      voltage = (vbat * 110) / 21;          
      Datas_Voltage_vBat_bp = voltage / 100;
      Datas_Voltage_vBat_ap = ((voltage % 100) + 5) / 10;         
