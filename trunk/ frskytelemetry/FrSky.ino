@@ -1,4 +1,4 @@
-//Arduino pro mini pinout
+//Arduino pro mini 328 pinout
 //8 - A0 - DALLAS temperature sensor
 //7 - A1
 //6 - A2
@@ -14,6 +14,18 @@
 //3 - D7 - serial output
 //2 - D8
 //1 - D9
+
+
+/*
+DALLAS              2x3 PIN
+baro, acc           2x4 PIN
+GPS                 1x3 PIN
+out to receiver     1x3 PIN
+in from receiver    1x3 PIN
+fuel                1x3 PIN
+RPM                 1x3 PIN
+Voltage             1x2 PIN
+*/
 
 
 #include <SoftwareSerial.h>
@@ -578,18 +590,38 @@ void send_Fuel_level(void)
 // Cell voltage  todo !!!!!!!!!!!!!!!!!!
 void send_Cell_volt(void) // Datas FrSky FLVS-01 voltage sensor
 {
-  uint16_t datasVolt;
-  uint8_t cellNo=1;
-  float voltageConst=0.002;
-  uint16_t voltage = 4; //V
-  uint8_t number_of_cells = 0;   // LiPo 3S = 3; LiPo 4S = 4 ...
-  static uint8_t cell = 0;
-  if (cell >= number_of_cells); cell = 0;
-  
-  uint16_t mask = 4095 + cellNo;
+  /*the first 4 bit of the voltage data refers to battery cell number, while the last 12 bit refers to the 
+  voltage value. 0-2100 corresponding to 0-4.2V. 
+  e.g: 
+  ......0x5E 0x06 0x18 0x34 0x5E........
+  0x06 refers to the voltage DataID
+  0x18 0x34
+  0001 1000 0011 0100
+  0001(1) means the first cell of pack, the last12bit 0x834 (2100) means the value is 4.2V
 
-  datasVolt = (uint16_t)(voltage / voltageConst) ^ mask;
+  //bit
+  //0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15
+  //cell#  | voltage - 2100 = 0-4.2V
+  */
   
+  uint16_t datasVolt;
+  uint16_t cellNo=1;
+  cellNo=cellNo<<12;
+  
+  float voltageConst=0.002;
+  float voltage = 4.0; //V
+  datasVolt=(uint16_t)voltage/voltageConst;
+  
+  datasVolt=cellNo | datasVolt;
+
+  uint16_t temp;
+  //0001 1000 0011 0100   6196
+  //datasVolt & 0xff
+  //0000 0000 0011 0100   34
+  //<<8
+  //
+  temp = (datasVolt & 0xff)<<8; //53238
+  temp = temp | datasVolt<<8  //  23
   
   #ifdef verbose
   SerialVerbose.print("Volt:");
@@ -597,10 +629,6 @@ void send_Cell_volt(void) // Datas FrSky FLVS-01 voltage sensor
   #endif
   
   sendDataHead(ID_Volt);
-  //bit
-  //0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15
-  //cell#  | voltage - 2100 = 0-4.2V
-  datasVolt = 13336;
   write_FrSky16(datasVolt);
 }
 
