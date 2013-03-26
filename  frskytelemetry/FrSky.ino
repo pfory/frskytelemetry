@@ -17,13 +17,17 @@
 
 
 /*
-DALLAS              2x3 PIN
-baro, acc           2x4 PIN
-GPS                 1x3 PIN
-out to receiver     1x3 PIN
-in from receiver    1x3 PIN
-fuel                1x3 PIN
-RPM                 1x3 PIN
+2x4
+7x3
+1x2
+
+baro, acc           2x4 PIN + - SCK SDL
+DALLAS              2x3 PIN + - sig
+GPS                 1x3 PIN + - sig
+out to receiver     1x3 PIN + - sig
+in from receiver    1x3 PIN + - 
+fuel                1x3 PIN + - sig
+RPM                 1x3 PIN + - sig
 Voltage             1x2 PIN
 */
 
