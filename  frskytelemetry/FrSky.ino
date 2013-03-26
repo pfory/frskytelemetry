@@ -59,6 +59,7 @@ int16_t BMP085MeasDelay;
 byte calibrationCycle=0;
 float altitudeGround;
 float altitudeAvg;
+bool calBMPOk = false;
 #define BMP_CAL_CYCLES 30
 
 #define ignoreFix
@@ -68,7 +69,7 @@ static int32_t  GPS_coord[2];
 #define LON  1
 
 // user defines
-#define FAS_100  //if commment out, MultiWii vBat voltage will be send instead of FrSky FAS 100 voltage
+//#define FAS_100  //if commment out, MultiWii vBat voltage will be send instead of FrSky FAS 100 voltage
 
 static uint8_t  vbat;               // battery voltage in 0.1V steps
 
@@ -270,6 +271,7 @@ void loop() {
       SerialVerbose.print(altitudeGround);
       #endif
       calibrationCycle++;
+      calBMPOk = true;
     }
     
     #ifdef verbose
@@ -343,7 +345,8 @@ bool GPS_newFrame(char c) {
       else if (param == 7)                     {GPS_numSat = grab_fields(string,0);}
       else if (param == 9)                     {GPS_altitude = grab_fields(string,0);}	// altitude in meters added by Mis
     } else if (frame == FRAME_RMC) {
-      if      (param == 7)                     {GPS_speed = ((uint32_t)grab_fields(string,1)*5144L)/1000L;}  //gps speed in cm/s will be used for navigation	
+    //  if      (param == 7)                     {GPS_speed = ((uint32_t)grab_fields(string,1)*5144L)/1000L;}  //gps speed in cm/s will be used for navigation	
+      if      (param == 7)                     {GPS_speed = (uint32_t)grab_fields(string,1);}  //gps speed in knots*10
       else if (param == 8)                     {GPS_ground_course = grab_fields(string,1); }                 //ground course deg*10 
     }
     param++; offset = 0;
@@ -445,12 +448,6 @@ void write_FrSky8(uint8_t Data)
   SerialVerbose.print(Data, HEX);
   SerialVerbose.print(" ");
   #endif
-  /*uint8_t Head = headTXFrSky;
-  if (++Head >= FRSKY_BUFFER_SIZE) Head = 0;
-  bufFrSky[Head] = Data; 
-  headTXFrSky = Head;*/
-  //SerialFrSky.write(Data);
-  //SerialWrite(TELEMETRY_FRSKY_SERIAL, Data);
   Serial.write(Data);
 }
 
@@ -501,7 +498,9 @@ void telemetry_frsky()
     send_RPM();
     send_Temperature2();
     send_Cell_volt();      
-    send_Altitude();
+    if (calBMPOk) { //calibration is complete
+      send_Altitude();
+    }
     send_Accel();
     send_Voltage_ampere();
     sendDataTail();   
@@ -609,27 +608,54 @@ void send_Cell_volt(void) // Datas FrSky FLVS-01 voltage sensor
   cellNo=cellNo<<12;
   
   float voltageConst=0.002;
-  float voltage = 4.0; //V
-  datasVolt=(uint16_t)voltage/voltageConst;
+  float voltage = 4.2; //V
+  datasVolt=(uint16_t)(voltage/voltageConst);
   
   datasVolt=cellNo | datasVolt;
 
   uint16_t temp;
-  //0001 1000 0011 0100   6196
+  //0001 1000 0011 0011   0x1833
   //datasVolt & 0xff
-  //0000 0000 0011 0100   34
+  //0000 0000 0011 0011   0x33
   //<<8
-  //
-  temp = (datasVolt & 0xff)<<8; //53238
-  temp = temp | datasVolt<<8  //  23
+  //0011 0011 0000 0000   0x3300
+  temp = (datasVolt & 0xff)<<8; 
+  //datasVolt>>8
+  //0001 1000 0000 0000   0x18
+  //| temp
+  //0011 0011 0001 1000   0x3318
+  temp = datasVolt>>8 | temp;
+  datasVolt = temp;
   
+  /*sendDataHead(ID_Volt);
   #ifdef verbose
   SerialVerbose.print("Volt:");
   SerialVerbose.println(datasVolt);
   #endif
+  write_FrSky16(datasVolt);
+  */
+  sendDataHead(ID_Volt);
+  write_FrSky16(0x1408);
   
   sendDataHead(ID_Volt);
-  write_FrSky16(datasVolt);
+  write_FrSky16(0x1F1B);
+
+
+  sendDataHead(ID_Volt);
+  write_FrSky16(0x3428);
+
+  sendDataHead(ID_Volt);
+  write_FrSky16(0x3438);
+
+  sendDataHead(ID_Volt);
+  write_FrSky16(0x2448);
+
+  sendDataHead(ID_Volt);
+  write_FrSky16(0x3458);
+
+  /*sendDataHead(ID_Volt);
+  write_FrSky16(0x3168);*/
+  
 }
 
 // Altitude from BMP
@@ -649,9 +675,11 @@ void send_GPS_speed(void)
   {            
   #endif
     sendDataHead(ID_GPS_speed_bp);
-    write_FrSky16(GPS_speed * 0.036); //cm/s -> km/h
+    //write_FrSky16(GPS_speed * 0.036); //cm/s -> km/h
+    write_FrSky16(GPS_speed / 10); //knots
     sendDataHead(ID_GPS_speed_ap);
-    write_FrSky16(0);
+    write_FrSky16(GPS_speed % 10); //knots
+    //write_FrSky16(0);
   #ifndef ignoreFix  
   }
   #endif
@@ -696,20 +724,22 @@ void send_Time(void)
 {
   uint32_t seconds_since_start = millis() / 1000;
         
-  uint16_t Datas_Date_month;
-  uint16_t Datas_Year;
-  uint16_t Datas_Minutes_hours;
-  uint16_t Datas_seconds;
-        
-  Datas_Date_month = 0;
-  Datas_Year = 12;
-  Datas_Minutes_hours = (seconds_since_start / 60) % 60;
-  Datas_seconds = seconds_since_start % 60;      
+  sendDataHead(ID_Date_Month); //0x15
   
-  sendDataHead(ID_Hour_Minute);
-  write_FrSky16(Datas_Minutes_hours);
-  sendDataHead(ID_Second);
-  write_FrSky16(Datas_seconds);
+  //Example
+  //write_FrSky16(540); 
+  //0000 0010 0001 1100 = 0x021C = 28.2.  
+  // 0x02    |  0x1C
+  //write_FrSky16((0x02<<8)|0x1C); //28.2.
+
+  write_FrSky16((0x01<<8)|0x01); //1.1.
+  sendDataHead(ID_Year); //0x16
+  write_FrSky16(12); //2012
+
+  sendDataHead(ID_Hour_Minute); //0x17
+  write_FrSky16(((seconds_since_start / 60) % 60)<<8 | ((seconds_since_start / 3600) % 24));
+  sendDataHead(ID_Second); //0x18
+  write_FrSky16(seconds_since_start % 60);
 }
 
 // ACC
@@ -732,6 +762,11 @@ void send_Accel(void)
   // Datas_Acc_X = ((float)accSmooth[0] / acc_1G) * 1000;
   // Datas_Acc_Y = ((float)accSmooth[1] / acc_1G) * 1000;
   // Datas_Acc_Z = ((float)accSmooth[2] / acc_1G) * 1000;
+
+  //for debug
+  Datas_Acc_X = 8888;
+  Datas_Acc_Y = 512;
+  Datas_Acc_Z = 251;
 
   sendDataHead(ID_Acc_X);
   write_FrSky16(Datas_Acc_X);
@@ -774,6 +809,10 @@ void send_Voltage_ampere(void)
      write_FrSky16(Datas_Voltage_vBat_bp);
      sendDataHead(ID_Voltage_Amp_ap);
      write_FrSky16(Datas_Voltage_vBat_ap);   
+
+    sendDataHead(ID_Current);
+    write_FrSky16(505); //50A
+
   }
   #endif
 }
