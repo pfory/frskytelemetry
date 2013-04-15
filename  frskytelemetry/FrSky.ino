@@ -1,12 +1,12 @@
 //Arduino pro mini 328 pinout
-//8 - A0 - DALLAS temperature sensor
+//8 - A0
 //7 - A1
 //6 - A2
 //5 - A3
 //1 - A4 - I2C baro, Accelerometer
 //2 - A5 - I2C baro, Accelerometer
-//2 - D1 - Output to FrSky receiver
-//8 - D2
+//2 - D1 - TXO Output to FrSky receiver
+//8 - D2 - DALLAS temperature sensor
 //7 - D3
 //6 - D4 - GPS, TTL level
 //5 - D5
@@ -156,7 +156,7 @@ static uint32_t FrSkyTime  = 0;
 #include <OneWire.h>
 #include <limits.h>
 #include <DallasTemperature.h>
-#define ONE_WIRE_BUS A0
+#define ONE_WIRE_BUS D2
 OneWire onewire(ONE_WIRE_BUS); // pin for onewire DALLAS bus
 DallasTemperature dsSensors(&onewire);
 DeviceAddress tempDeviceAddress;
