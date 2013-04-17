@@ -7,8 +7,8 @@
 //2 - A5 - I2C baro, Accelerometer
 //2 - D1 - TXO Output to FrSky receiver
 //8 - D2 - DALLAS temperature sensor
-//7 - D3 - GPS, TTL level
-//6 - D4 
+//7 - D3 
+//6 - D4 - GPS, TTL level
 //5 - D5 - Fuel
 //4 - D6 - RPM
 //3 - D7 - serial output
