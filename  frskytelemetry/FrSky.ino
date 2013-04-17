@@ -7,10 +7,10 @@
 //2 - A5 - I2C baro, Accelerometer
 //2 - D1 - TXO Output to FrSky receiver
 //8 - D2 - DALLAS temperature sensor
-//7 - D3
-//6 - D4 - GPS, TTL level
-//5 - D5
-//4 - D6
+//7 - D3 - GPS, TTL level
+//6 - D4 
+//5 - D5 - Fuel
+//4 - D6 - RPM
 //3 - D7 - serial output
 //2 - D8
 //1 - D9
@@ -137,10 +137,10 @@ unsigned int showInterval=1000;
 #define GPS_SERIAL                4
 #define GPS_BAUD                  4800
 
-SoftwareSerial SerialGPS        (GPS_SERIAL,5);             // RX, TX
+SoftwareSerial SerialGPS        (GPS_SERIAL,12);             // RX, TX
 //#define verbose
 #ifdef verbose
-SoftwareSerial SerialVerbose    (6,7); // RX, TX
+SoftwareSerial SerialVerbose    (11,10); // RX, TX
 #endif
 static volatile uint8_t headTX,tailTX;
 #define TX_BUFFER_SIZE 128
@@ -156,7 +156,7 @@ static uint32_t FrSkyTime  = 0;
 #include <OneWire.h>
 #include <limits.h>
 #include <DallasTemperature.h>
-#define ONE_WIRE_BUS D2
+#define ONE_WIRE_BUS 2
 OneWire onewire(ONE_WIRE_BUS); // pin for onewire DALLAS bus
 DallasTemperature dsSensors(&onewire);
 DeviceAddress tempDeviceAddress;
@@ -176,15 +176,18 @@ float sensor[NUMBER_OF_DEVICES];
 
 int sensorReading = INT_MIN;
 
+bool status=LOW;
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(TELEMETRY_FRSKY_BAUD);
   SerialGPS.begin(GPS_BAUD);
   #ifdef verbose
   SerialVerbose.begin(9600);
   SerialVerbose.println("Test GPS");
   #endif
 
+  pinMode(13, OUTPUT);
+  
   accInit();
   
   baroInit();
@@ -200,10 +203,15 @@ void setup() {
 }
 
 void loop() {
-  //if (!SerialGPS.isListening()) SerialGPS.listen();
-  if (SerialGPS.available())
+  if (!SerialGPS.isListening()) SerialGPS.listen();
+  if (SerialGPS.available()) {
+    digitalWrite(13,status);
+    status = !status;
+    #ifdef verbose
+    SerialVerbose.println("GPS");
+    #endif
     GPS_newFrame(SerialGPS.read());
-
+  }
   if (!dsMeasStarted)
   {
     #ifdef verbose
@@ -330,8 +338,6 @@ bool GPS_newFrame(char c) {
   static char string[15];
   static uint8_t checksum_param, frame = 0;
   if (c == '$') {
-    //SerialVerbose.println();
-    //SerialVerbose.print(c);
     param = 0; offset = 0; parity = 0;
   } else if (c == ',' || c == '*') {
     //SerialVerbose.print(c);
@@ -826,9 +832,10 @@ void dsInit(void) {
   dsSensors.begin();
   numberOfDevices = dsSensors.getDeviceCount();
   
-  #ifdef verbose
-  SerialVerbose.print("DALLAS:");
-  SerialVerbose.println(numberOfDevices);
+  #ifdef verbose  
+  SerialVerbose.println("Testing device connections DALLAS");
+  SerialVerbose.print("PIN:");
+  SerialVerbose.println(ONE_WIRE_BUS);
   #endif
   // Loop through each device, print out address
   for (byte i=0;i<numberOfDevices; i++) {
@@ -845,6 +852,11 @@ void dsInit(void) {
       //Serial.println("Unable to get device address for sensor " + i);
     }
   }
+  #ifdef verbose  
+  SerialVerbose.print("#DALLAS sensor(s):");
+  SerialVerbose.println(numberOfDevices);
+  #endif
+
   dsSensors.setResolution(DALLAS_RESOLUTION);
   dsSensors.setWaitForConversion(false);
 }
@@ -854,8 +866,8 @@ void accInit(void) {
   Wire.begin();
   accel.initialize();
   #ifdef verbose
-  SerialVerbose.println("Testing device connections...");
-  SerialVerbose.println(accel.testConnection() ? "BMA150 connection successful" : "BMA150 connection failed");
+  SerialVerbose.println("Testing device connections ACC");
+  SerialVerbose.println(accel.testConnection() ? "ACC connection successful" : "ACC connection failed");
   SerialVerbose.print("Device ID:");
   SerialVerbose.println(accel.getDeviceID());
   SerialVerbose.print("Chip rev.:");
@@ -868,7 +880,7 @@ void baroInit() {
   barometer.initialize();
   // verify connection
   #ifdef verbose
-  SerialVerbose.println("Testing device connections...");
+  SerialVerbose.println("Testing device connections BARO");
   SerialVerbose.println(barometer.testConnection() ? "BMP085 connection successful" : "BMP085 connection failed");
   #endif
   BMP085MeasDelay = barometer.getMeasureDelayMilliseconds();
